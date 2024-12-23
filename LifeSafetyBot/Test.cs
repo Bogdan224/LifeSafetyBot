@@ -35,7 +35,7 @@ namespace LifeSafetyBot
             List<MedicalKit> kits = AllMedicalKits();
             for (int i = 0; i < kits.Count; i++)
             {
-                if(str.ToLower() == kits[i].GetDescription().ToLower())
+                if(str.CompareTo(kits[i].GetDescription()) == 0)
                 {
                     return kits[i];
                 }
@@ -72,13 +72,7 @@ namespace LifeSafetyBot
 
         public Test()
         {
-            _path = AppContext.BaseDirectory;
-#if DEBUG
-            _path = _path.Replace("\\bin\\Debug", "");
-#else
-            _path = _path.Replace("\\bin\\Release", "");
-#endif
-            _path += "TextFiles";
+            _path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "TextFiles");
 
             if (!File.Exists(_path + "\\Questions.txt")) throw new NullReferenceException();
             _questions = File.ReadLines(_path + "\\Questions.txt").ToList();

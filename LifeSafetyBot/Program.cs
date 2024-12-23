@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Telegram.Bot;
@@ -20,7 +21,7 @@ namespace LifeSafetyBot
         private static string answer;
         private static bool WaitForAnswer;
 
-        public static void Main(string[] args)
+        public static void Main()
         {
             bot = new TelegramBotClient(token);
             
@@ -50,8 +51,6 @@ namespace LifeSafetyBot
                 await Task.Delay(100);
             }
 
-
-            bot.OnMessage -= OnMessage;
             WaitForAnswer = false;
             Test test = new Test();
             List<MedicalKit> kits = MedicalKitExtention.AllMedicalKits();
@@ -85,18 +84,24 @@ namespace LifeSafetyBot
                         answers.Add(answer.ToMedicalKit());
                     }
                 }
-
+                StringBuilder str = new StringBuilder("Ваш ответ: ");
+                foreach (var item in answers)
+                {
+                    str.Append(item.GetDescription() + ", ");
+                }
+                str.Remove(str.Length - 2, 2);
+                await bot.SendMessage(msg.Chat, str.ToString());
                 await bot.SendMessage(msg.Chat, test.CheckAnswers(answers));
 
                 question = test.GetQuestion();
             }
             await bot.SendMessage(msg.Chat, test.GetResult());
-            bot.OnMessage += OnMessage;
+            await OnCommand("/start", "", msg);
         }
 
         async static Task OnError(Exception exception, HandleErrorSource source)
         {
-            Console.WriteLine(exception);
+            await Task.Run(() => Console.WriteLine(exception));
         }
 
         async static Task OnMessage(Message msg, UpdateType type)
@@ -148,7 +153,6 @@ namespace LifeSafetyBot
 
         async static Task OnCallbackQuery(CallbackQuery callbackQuery)
         {
-            await bot.AnswerCallbackQuery(callbackQuery.Id, $"Вы выбрали {callbackQuery.Data}");
             answer = callbackQuery.Data;
             WaitForAnswer = false;
             if(answer == "Ответить" || answer == "Начать")
