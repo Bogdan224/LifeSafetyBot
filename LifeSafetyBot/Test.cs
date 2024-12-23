@@ -73,7 +73,11 @@ namespace LifeSafetyBot
         public Test()
         {
             _path = AppContext.BaseDirectory;
+#if DEBUG
             _path = _path.Replace("\\bin\\Debug", "");
+#else
+            _path = _path.Replace("\\bin\\Release", "");
+#endif
             _path += "TextFiles";
 
             if (!File.Exists(_path + "\\Questions.txt")) throw new NullReferenceException();
