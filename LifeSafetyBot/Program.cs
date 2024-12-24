@@ -1,4 +1,6 @@
-﻿using System;
+﻿using LifeSafetyBot;
+using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
@@ -13,18 +15,22 @@ using Telegram.Bot.Types.ReplyMarkups;
 
 namespace LifeSafetyBot
 {
+    public class TestState
+    {
+        public bool WaitForAnswer { get; set; } = false;
+        public string Answer { get; set; } = "";
+    }
+
     public class Program
     {
-        
         private static TelegramBotClient bot;
         private static readonly string token = "7664998270:AAHgI13c9OE4X8UZimjnLqNzVXv53gGeJyc"; // Замените на свой токен
-        private static string answer;
-        private static bool WaitForAnswer;
+        private static ConcurrentDictionary<long, TestState> _userTests = new ConcurrentDictionary<long, TestState>();
 
         public static void Main()
         {
             bot = new TelegramBotClient(token);
-            
+
             bot.OnError += OnError;
             bot.OnMessage += OnMessage;
             bot.OnUpdate += OnUpdate;
@@ -36,22 +42,26 @@ namespace LifeSafetyBot
 
         async static void StartTesting(Message msg)
         {
-            WaitForAnswer = false;
+            TestState testState = new TestState();
+            _userTests[msg.Chat.Id] = testState;
+
             var inlineMarkup = new InlineKeyboardMarkup();
             inlineMarkup.AddButton("Начать");
-            await bot.SendMessage(msg.Chat,
+            Console.WriteLine(msg.Chat.Id);
+            await bot.SendMessage(msg.Chat.Id,
                         "<b><u>Важная информация</u></b>:\n" +
                         "Все вопросы требуют <b>НЕСКОЛЬКО</b> вариантов ответов. Для того, чтобы выбрать вариант ответа, " +
                         "нужно нажать на кнопку с этим вариантом под вопросом. Когда вы выбрали варианты ответов, нужно нажать " +
                         "на кнопку <b>Отправить</b> в самом низу. Удачи!",
                         parseMode: ParseMode.Html, replyMarkup: inlineMarkup);
-            WaitForAnswer = true;
-            while (WaitForAnswer)
+            testState.WaitForAnswer = true;
+            while (testState.WaitForAnswer)
             {
                 await Task.Delay(100);
             }
+            
 
-            WaitForAnswer = false;
+            testState.WaitForAnswer = false;
             Test test = new Test();
             List<MedicalKit> kits = MedicalKitExtention.AllMedicalKits();
             inlineMarkup = new InlineKeyboardMarkup();
@@ -64,24 +74,25 @@ namespace LifeSafetyBot
             inlineMarkup.AddButton("Ответить");
 
             string question = test.GetQuestion();
-            while (true) 
+            
+            while (true)
             {
-                answer = "";
+                testState.Answer = "";
                 if (question == null) break;
                 List<MedicalKit> answers = new List<MedicalKit>();
-                await bot.SendMessage(msg.Chat, question);
-                await bot.SendMessage(msg.Chat, "Окажите первую помощь пострадавшему, используя предметы из аптечки:", replyMarkup: inlineMarkup);
+                await bot.SendMessage(msg.Chat.Id, question);
+                await bot.SendMessage(msg.Chat.Id, "Окажите первую помощь пострадавшему, используя предметы из аптечки:", replyMarkup: inlineMarkup);
 
-                while (answer != "Ответить")
+                while (testState.Answer != "Ответить")
                 {
-                    WaitForAnswer = true;
-                    while (WaitForAnswer)
+                    testState.WaitForAnswer = true;
+                    while (testState.WaitForAnswer)
                     {
                         await Task.Delay(100);
                     }
-                    if (answer != "Ответить" && !answers.Contains(answer.ToMedicalKit()))
+                    if (testState.Answer != "Ответить" && !answers.Contains(testState.Answer.ToMedicalKit()))
                     {
-                        answers.Add(answer.ToMedicalKit());
+                        answers.Add(testState.Answer.ToMedicalKit());
                     }
                 }
                 StringBuilder str = new StringBuilder("Ваш ответ: ");
@@ -90,12 +101,12 @@ namespace LifeSafetyBot
                     str.Append(item.GetDescription() + ", ");
                 }
                 str.Remove(str.Length - 2, 2);
-                await bot.SendMessage(msg.Chat, str.ToString());
-                await bot.SendMessage(msg.Chat, test.CheckAnswers(answers));
+                await bot.SendMessage(msg.Chat.Id, str.ToString());
+                await bot.SendMessage(msg.Chat.Id, test.CheckAnswers(answers));
 
                 question = test.GetQuestion();
             }
-            await bot.SendMessage(msg.Chat, test.GetResult());
+            await bot.SendMessage(msg.Chat.Id, test.GetResult());
             await OnCommand("/start", "", msg);
         }
 
@@ -132,7 +143,7 @@ namespace LifeSafetyBot
             {
                 case "/start":
                     await bot.SendMessage(msg.Chat,
-                        "<b><u>Меню</u></b>:\n"+
+                        "<b><u>Меню</u></b>:\n" +
                         "/start_test - Начать тест\n",
                         parseMode: ParseMode.Html);
                     break;
@@ -153,9 +164,9 @@ namespace LifeSafetyBot
 
         async static Task OnCallbackQuery(CallbackQuery callbackQuery)
         {
-            answer = callbackQuery.Data;
-            WaitForAnswer = false;
-            if(answer == "Ответить" || answer == "Начать")
+            _userTests[callbackQuery.Message.Chat.Id].Answer = callbackQuery.Data;
+            _userTests[callbackQuery.Message.Chat.Id].WaitForAnswer = false;
+            if (callbackQuery.Data == "Ответить" || callbackQuery.Data == "Начать")
                 await RemoveKeyboard(bot, callbackQuery.Message.Chat.Id, callbackQuery.Message.MessageId);
         }
 
